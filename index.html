@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>GTP Attachment Entry Form</title>
+
+  <style>
+    * { box-sizing: border-box; font-family: Arial, sans-serif; }
+    body { max-width: 550px; margin: 20px auto; padding: 20px; background: #f5f5f5; }
+    .container { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    h2 { color: #333; margin-top: 0; }
+    label { display: block; margin-top: 15px; font-weight: bold; color: #555; font-size: 14px; }
+    input, select { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+    button { width: 100%; padding: 12px; margin-top: 20px; background: #0066cc; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+    button:disabled { background: #999; cursor: not-allowed; }
+
+    .search-wrapper { position: relative; margin-top: 5px; }
+    .dropdown-list {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      max-height: 250px;
+      overflow-y: auto;
+      background: white;
+      border: 1px solid #ccc;
+      z-index: 100;
+      display: none;
+    }
+    .dropdown-list.active { display: block; }
+    .dropdown-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; }
+    .dropdown-item:hover { background: #e8f4fd; color: #0066cc; }
+    .no-match { color: #999; font-style: italic; cursor: default; }
+
+    .auto-fill-box {
+      background: #e8f4fd;
+      padding: 12px;
+      border-radius: 4px;
+      margin-top: 5px;
+      border-left: 4px solid #0066cc;
+      font-weight: bold;
+      color: #0066cc;
+    }
+
+    .message { margin-top: 15px; padding: 10px; border-radius: 4px; display: none; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    .info { background: #d1ecf1; color: #0c5460; }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h2>GTP Attachment Entry Form</h2>
+
+    <label>Select SC NO:</label>
+    <div class="search-wrapper">
+      <input
+        type="text"
+        id="scSearch"
+        placeholder="Loading SC NO..."
+        autocomplete="off"
+        oninput="filterDropdown()"
+        onfocus="showDropdown()"
+      >
+      <div class="dropdown-list" id="dropdownList"></div>
+    </div>
+
+    <div id="itemSection" style="display:none;">
+      <label id="itemLabel">Select Item Name:</label>
+      <select id="itemName" onchange="onItemSelect()"></select>
+      <div class="auto-fill-box" id="itemAutoFill" style="display:none;"></div>
+    </div>
+
+    <label>Attachment of Approved Drawing:</label>
+    <input type="file" id="attDrawing">
+
+    <label>Attachment of Approved GTP:</label>
+    <input type="file" id="attGTP">
+
+    <label>Attachment of Embossing:</label>
+    <input type="file" id="attEmbossing">
+
+    <button id="submitBtn" onclick="submitForm()">Submit</button>
+
+    <div id="message" class="message"></div>
+  </div>
+
+  <script>
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwEzj2cWIdUO6ZLUjXFO7XO5Xu51KW4TZdDvyk3XCeuYAnak6ZuzU6rAspaDVnAimdFXg/exec";
+
+    let scData = {};
+    let allScNos = [];
+    let selectedScNo = null;
+    let selectedItemName = null;
+
+    window.onload = async function () {
+      try {
+        const res = await fetch(WEB_APP_URL + "?action=getData");
+        const data = await res.json();
+
+        if (!data.success) {
+          showMessage(data.message, "error");
+          return;
+        }
+
+        scData = data.data;
+        allScNos = Object.keys(scData).sort();
+
+        document.getElementById("scSearch").placeholder =
+          `Type to search (${allScNos.length} SC NOs available)...`;
+
+        renderDropdown(allScNos);
+      } catch (err) {
+        showMessage("Failed to load data: " + err.message, "error");
+      }
+    };
+
+    function renderDropdown(list) {
+      const dropdown = document.getElementById("dropdownList");
+      dropdown.innerHTML = "";
+
+      if (list.length === 0) {
+        dropdown.innerHTML = `<div class="dropdown-item no-match">No matching SC NO found</div>`;
+        return;
+      }
+
+      list.forEach(sc => {
+        const div = document.createElement("div");
+        div.className = "dropdown-item";
+        div.textContent = sc;
+        div.onclick = () => selectScNo(sc);
+        dropdown.appendChild(div);
+      });
+    }
+
+    function filterDropdown() {
+      const query = document.getElementById("scSearch").value.trim().toLowerCase();
+
+      const filtered = allScNos.filter(sc =>
+        sc.toLowerCase().includes(query)
+      );
+
+      renderDropdown(filtered);
+      showDropdown();
+
+      if (selectedScNo && document.getElementById("scSearch").value !== selectedScNo) {
+        selectedScNo = null;
+        selectedItemName = null;
+        document.getElementById("itemSection").style.display = "none";
+      }
+    }
+
+    function showDropdown() {
+      document.getElementById("dropdownList").classList.add("active");
+    }
+
+    function hideDropdown() {
+      document.getElementById("dropdownList").classList.remove("active");
+    }
+
+    function selectScNo(sc) {
+      selectedScNo = sc;
+      document.getElementById("scSearch").value = sc;
+      hideDropdown();
+      updateItemSection();
+    }
+
+    document.addEventListener("click", function (e) {
+      if (!e.target.closest(".search-wrapper")) hideDropdown();
+    });
+
+    function updateItemSection() {
+      const items = scData[selectedScNo];
+      const section = document.getElementById("itemSection");
+      const dropdown = document.getElementById("itemName");
+      const autoFill = document.getElementById("itemAutoFill");
+      const label = document.getElementById("itemLabel");
+
+      selectedItemName = null;
+      section.style.display = "block";
+      dropdown.innerHTML = "";
+      dropdown.style.display = "none";
+      autoFill.style.display = "none";
+
+      if (items.length === 1) {
+        label.textContent = "Item Name (auto-filled):";
+        selectedItemName = items[0].itemName;
+        autoFill.textContent = selectedItemName || "(empty)";
+        autoFill.style.display = "block";
+      } else {
+        label.textContent = "Select Item Name:";
+        dropdown.style.display = "block";
+        dropdown.innerHTML = `<option value="">-- Select Item --</option>`;
+
+        items.forEach((item, index) => {
+          const opt = document.createElement("option");
+          opt.value = index;
+          opt.textContent = item.itemName || "(empty)";
+          dropdown.appendChild(opt);
+        });
+      }
+    }
+
+    function onItemSelect() {
+      const idx = document.getElementById("itemName").value;
+      if (idx === "") {
+        selectedItemName = null;
+        return;
+      }
+      selectedItemName = scData[selectedScNo][Number(idx)].itemName;
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        if (!file) {
+          resolve(null);
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = e => {
+          resolve({
+            data: e.target.result.split(",")[1],
+            mimeType: file.type,
+            fileName: file.name
+          });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function submitForm() {
+      if (!selectedScNo) {
+        showMessage("Please select SC NO", "error");
+        return;
+      }
+
+      if (selectedItemName === null) {
+        showMessage("Please select Item Name", "error");
+        return;
+      }
+
+      const btn = document.getElementById("submitBtn");
+      btn.disabled = true;
+      btn.textContent = "Uploading...";
+      showMessage("Uploading files, please wait...", "info");
+
+      try {
+        const payload = {
+          scNo: selectedScNo,
+          itemName: selectedItemName,
+          attDrawing: await fileToBase64(document.getElementById("attDrawing").files[0]),
+          attGTP: await fileToBase64(document.getElementById("attGTP").files[0]),
+          attEmbossing: await fileToBase64(document.getElementById("attEmbossing").files[0])
+        };
+
+        const res = await fetch(WEB_APP_URL, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+
+        const response = await res.json();
+
+        if (response.success) {
+          showMessage(response.message, "success");
+          resetForm();
+        } else {
+          showMessage(response.message, "error");
+        }
+
+      } catch (err) {
+        showMessage("Error: " + err.message, "error");
+      }
+
+      btn.disabled = false;
+      btn.textContent = "Submit";
+    }
+
+    function resetForm() {
+      selectedScNo = null;
+      selectedItemName = null;
+
+      document.getElementById("scSearch").value = "";
+      document.getElementById("itemSection").style.display = "none";
+      document.getElementById("attDrawing").value = "";
+      document.getElementById("attGTP").value = "";
+      document.getElementById("attEmbossing").value = "";
+
+      renderDropdown(allScNos);
+    }
+
+    function showMessage(msg, type) {
+      const el = document.getElementById("message");
+      el.textContent = msg;
+      el.className = "message " + type;
+      el.style.display = "block";
+    }
+  </script>
+</body>
+</html>
