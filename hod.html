@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prod. Start/End Date Form</title>
+  <style>
+    * { box-sizing: border-box; font-family: Arial, sans-serif; }
+    body { max-width: 550px; margin: 20px auto; padding: 20px; background: #f5f5f5; }
+    .container { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    h2 { color: #333; margin-top: 0; }
+    label { display: block; margin-top: 15px; font-weight: bold; color: #555; font-size: 14px; }
+    input, select, textarea { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; font-family: Arial, sans-serif; }
+    textarea { resize: vertical; min-height: 80px; }
+    select:disabled { background: #eee; cursor: not-allowed; }
+    
+    .search-wrapper { position: relative; margin-top: 5px; }
+    .search-input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+    .search-input:focus { outline: none; border-color: #0066cc; box-shadow: 0 0 0 2px rgba(0,102,204,0.15); }
+    .dropdown-list {
+      position: absolute; top: 100%; left: 0; right: 0;
+      max-height: 250px; overflow-y: auto;
+      background: white; border: 1px solid #ccc; border-top: none;
+      border-radius: 0 0 4px 4px; z-index: 100; display: none;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .dropdown-list.active { display: block; }
+    .dropdown-item { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+    .dropdown-item:last-child { border-bottom: none; }
+    .dropdown-item:hover, .dropdown-item.highlighted { background: #e8f4fd; color: #0066cc; }
+    .dropdown-item.no-match { color: #999; font-style: italic; cursor: default; }
+    .dropdown-item.no-match:hover { background: white; color: #999; }
+    .clear-btn {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; font-size: 18px; color: #999;
+      cursor: pointer; padding: 0; width: auto; margin: 0; display: none;
+    }
+    .clear-btn:hover { color: #333; background: none; }
+    .clear-btn.visible { display: block; }
+    
+    .auto-fill-box { background: #e8f4fd; padding: 12px; border-radius: 4px; margin-top: 5px; border-left: 4px solid #0066cc; font-weight: bold; color: #0066cc; font-size: 14px; }
+    .hint { font-size: 12px; color: #777; margin-top: 3px; font-weight: normal; }
+    button { width: 100%; padding: 12px; margin-top: 20px; background: #0066cc; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+    button:hover { background: #0052a3; }
+    button:disabled { background: #999; cursor: not-allowed; }
+    .message { margin-top: 15px; padding: 10px; border-radius: 4px; display: none; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    .info { background: #d1ecf1; color: #0c5460; }
+    .loading { text-align: center; color: #666; padding: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Prod. Start/End Date Entry Form</h2>
+    
+    <div id="loadingMsg" class="loading">⏳ Loading SC numbers...</div>
+    
+    <div id="formContent" style="display:none;">
+      <label for="scSearch">Select SC NO:</label>
+      <div class="search-wrapper">
+        <input type="text" id="scSearch" class="search-input" 
+          placeholder="Type to search SC NO..." autocomplete="off"
+          oninput="filterDropdown()" onfocus="showDropdown()" onkeydown="handleKeyDown(event)">
+        <button type="button" class="clear-btn" id="clearBtn" onclick="clearSelection()">×</button>
+        <div class="dropdown-list" id="dropdownList"></div>
+      </div>
+      
+      <div id="itemSection" style="display:none;">
+        <label id="itemLabel" for="itemName">Select Item Name:</label>
+        <select id="itemName" onchange="onItemSelect()">
+          <option value="">-- Select Item --</option>
+        </select>
+        <div class="auto-fill-box" id="itemAutoFill" style="display:none;"></div>
+        <div class="hint" id="itemHint"></div>
+      </div>
+      
+      <label for="expectedStart">Expected Production Start Date:</label>
+      <input type="date" id="expectedStart">
+      
+      <label for="targetClosure">Target Date of Closure (by HOD):</label>
+      <input type="date" id="targetClosure">
+      
+      <label for="challenges">Challenges / Remarks by HOD:</label>
+      <textarea id="challenges" rows="4" placeholder="Enter any challenges or remarks..."></textarea>
+      
+      <button id="submitBtn" onclick="submitForm()">Submit</button>
+      
+      <div id="message" class="message"></div>
+    </div>
+  </div>
+
+  <script>
+    // ⚠️ Apne Apps Script Web App URL yahan paste karein
+    const APPS_SCRIPT_URL = 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
+    
+    let scData = {};
+    let allScNos = [];
+    let selectedScNo = null;
+    let selectedItemName = null;
+    let highlightedIndex = -1;
+
+    window.onload = function() {
+      loadDataFromBackend();
+    };
+
+    async function loadDataFromBackend() {
+      try {
+        const response = await fetch(APPS_SCRIPT_URL + '?action=getData');
+        const result = await response.json();
+        
+        if (result.success) {
+          loadData(result.data);
+          document.getElementById('loadingMsg').style.display = 'none';
+          document.getElementById('formContent').style.display = 'block';
+        } else {
+          document.getElementById('loadingMsg').textContent = '❌ Failed to load: ' + result.message;
+        }
+      } catch (err) {
+        document.getElementById('loadingMsg').textContent = '❌ Network error: ' + err.message;
+      }
+    }
+
+    function loadData(data) {
+      scData = data;
+      allScNos = Object.keys(data).sort();
+      
+      const searchInput = document.getElementById('scSearch');
+      
+      if (allScNos.length === 0) {
+        searchInput.placeholder = 'No SC Numbers found';
+        searchInput.disabled = true;
+        return;
+      }
+      
+      searchInput.placeholder = `Type to search (${allScNos.length} SC NOs available)...`;
+      renderDropdown(allScNos);
+    }
+
+    function renderDropdown(list) {
+      const dropdown = document.getElementById('dropdownList');
+      dropdown.innerHTML = '';
+      
+      if (list.length === 0) {
+        const div = document.createElement('div');
+        div.className = 'dropdown-item no-match';
+        div.textContent = 'No matching SC NO found';
+        dropdown.appendChild(div);
+        return;
+      }
+      
+      list.forEach((sc, idx) => {
+        const div = document.createElement('div');
+        div.className = 'dropdown-item';
+        div.textContent = sc;
+        div.onclick = () => selectScNo(sc);
+        div.dataset.index = idx;
+        dropdown.appendChild(div);
+      });
+    }
+
+    function filterDropdown() {
+      const query = document.getElementById('scSearch').value.trim().toLowerCase();
+      const clearBtn = document.getElementById('clearBtn');
+      
+      clearBtn.classList.toggle('visible', query.length > 0);
+      
+      if (!query) {
+        renderDropdown(allScNos);
+      } else {
+        const startsWith = [];
+        const contains = [];
+        
+        allScNos.forEach(sc => {
+          const lower = sc.toLowerCase();
+          if (lower.startsWith(query)) startsWith.push(sc);
+          else if (lower.includes(query)) contains.push(sc);
+        });
+        
+        renderDropdown([...startsWith, ...contains]);
+      }
+      
+      highlightedIndex = -1;
+      showDropdown();
+      
+      if (selectedScNo && document.getElementById('scSearch').value !== selectedScNo) {
+        selectedScNo = null;
+        document.getElementById('itemSection').style.display = 'none';
+      }
+    }
+
+    function showDropdown() {
+      document.getElementById('dropdownList').classList.add('active');
+    }
+
+    function hideDropdown() {
+      document.getElementById('dropdownList').classList.remove('active');
+      highlightedIndex = -1;
+    }
+
+    function selectScNo(sc) {
+      selectedScNo = sc;
+      document.getElementById('scSearch').value = sc;
+      document.getElementById('clearBtn').classList.add('visible');
+      hideDropdown();
+      updateItemSection();
+    }
+
+    function clearSelection() {
+      selectedScNo = null;
+      selectedItemName = null;
+      document.getElementById('scSearch').value = '';
+      document.getElementById('clearBtn').classList.remove('visible');
+      document.getElementById('itemSection').style.display = 'none';
+      renderDropdown(allScNos);
+      document.getElementById('scSearch').focus();
+    }
+
+    function handleKeyDown(e) {
+      const dropdown = document.getElementById('dropdownList');
+      const items = dropdown.querySelectorAll('.dropdown-item:not(.no-match)');
+      
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (items.length === 0) return;
+        showDropdown();
+        highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
+        updateHighlight(items);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        highlightedIndex = Math.max(highlightedIndex - 1, 0);
+        updateHighlight(items);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (highlightedIndex >= 0 && items[highlightedIndex]) {
+          selectScNo(items[highlightedIndex].textContent);
+        } else if (items.length === 1) {
+          selectScNo(items[0].textContent);
+        }
+      } else if (e.key === 'Escape') {
+        hideDropdown();
+      }
+    }
+
+    function updateHighlight(items) {
+      items.forEach((item, idx) => {
+        item.classList.toggle('highlighted', idx === highlightedIndex);
+        if (idx === highlightedIndex) item.scrollIntoView({ block: 'nearest' });
+      });
+    }
+
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.search-wrapper')) hideDropdown();
+    });
+
+    function updateItemSection() {
+      const scNo = selectedScNo;
+      const section = document.getElementById('itemSection');
+      const dropdown = document.getElementById('itemName');
+      const autoFill = document.getElementById('itemAutoFill');
+      const label = document.getElementById('itemLabel');
+      const hint = document.getElementById('itemHint');
+      
+      selectedItemName = null;
+      dropdown.innerHTML = '';
+      autoFill.style.display = 'none';
+      dropdown.style.display = 'none';
+      
+      if (!scNo || !scData[scNo]) {
+        section.style.display = 'none';
+        return;
+      }
+      
+      const items = scData[scNo];
+      section.style.display = 'block';
+      
+      if (items.length === 1) {
+        label.textContent = 'Item Name (auto-filled):';
+        autoFill.textContent = items[0].itemName || '(empty)';
+        autoFill.style.display = 'block';
+        hint.textContent = '';
+        selectedItemName = items[0].itemName;
+      } else {
+        label.textContent = 'Select Item Name:';
+        dropdown.style.display = 'block';
+        dropdown.innerHTML = '<option value="">-- Select Item --</option>';
+        
+        items.forEach((item, idx) => {
+          const opt = document.createElement('option');
+          opt.value = idx;
+          opt.textContent = item.itemName || '(empty)';
+          dropdown.appendChild(opt);
+        });
+        
+        hint.textContent = `${items.length} items available — please select one`;
+      }
+    }
+
+    function onItemSelect() {
+      const idx = document.getElementById('itemName').value;
+      if (idx === '' || !scData[selectedScNo]) {
+        selectedItemName = null;
+        return;
+      }
+      selectedItemName = scData[selectedScNo][parseInt(idx)].itemName;
+    }
+
+    async function submitForm() {
+      if (!selectedScNo) { showMessage('Please select an SC NO', 'error'); return; }
+      if (selectedItemName === null) { showMessage('Please select an Item Name', 'error'); return; }
+      
+      const expectedStart = document.getElementById('expectedStart').value;
+      const targetClosure = document.getElementById('targetClosure').value;
+      const challenges = document.getElementById('challenges').value;
+      
+      // At least one field filled hona chahiye
+      if (!expectedStart && !targetClosure && !challenges.trim()) {
+        showMessage('Please fill at least one field (date or remarks)', 'error');
+        return;
+      }
+      
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+      showMessage('Submitting, please wait...', 'info');
+      
+      const formData = {
+        formType: 'hod',  // Backend ko bata raha hai konsa form hai
+        scNo: selectedScNo,
+        itemName: selectedItemName,
+        expectedStart: expectedStart,
+        targetClosure: targetClosure,
+        challenges: challenges
+      };
+      
+      try {
+        const response = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify(formData)
+          // Note: Content-Type header intentionally NOT set
+          // Apps Script CORS ke saath text/plain assume karta hai
+        });
+        
+        const result = await response.json();
+        
+        btn.disabled = false;
+        btn.textContent = 'Submit';
+        
+        if (result.success) {
+          showMessage(result.message, 'success');
+          clearForm();
+        } else {
+          showMessage(result.message, 'error');
+        }
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = 'Submit';
+        showMessage('Error: ' + err.message, 'error');
+      }
+    }
+
+    function clearForm() {
+      clearSelection();
+      document.getElementById('expectedStart').value = '';
+      document.getElementById('targetClosure').value = '';
+      document.getElementById('challenges').value = '';
+    }
+
+    function showMessage(msg, type) {
+      const el = document.getElementById('message');
+      el.textContent = msg;
+      el.className = 'message ' + type;
+      el.style.display = 'block';
+    }
+  </script>
+</body>
+</html>
