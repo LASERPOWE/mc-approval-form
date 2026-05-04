@@ -54,13 +54,13 @@
   <div class="container">
     <h2>Prod. Start/End Date Entry Form</h2>
     
-    <div id="loadingMsg" class="loading">⏳ Loading SC numbers...</div>
+    <div id="loadingMsg" class="loading">⏳ Loading MC numbers...</div>
     
     <div id="formContent" style="display:none;">
-      <label for="scSearch">Select SC NO:</label>
+      <label for="mcSearch">Select MC NO:</label>
       <div class="search-wrapper">
-        <input type="text" id="scSearch" class="search-input" 
-          placeholder="Type to search SC NO..." autocomplete="off"
+        <input type="text" id="mcSearch" class="search-input" 
+          placeholder="Type to search MC NO..." autocomplete="off"
           oninput="filterDropdown()" onfocus="showDropdown()" onkeydown="handleKeyDown(event)">
         <button type="button" class="clear-btn" id="clearBtn" onclick="clearSelection()">×</button>
         <div class="dropdown-list" id="dropdownList"></div>
@@ -91,12 +91,12 @@
   </div>
 
   <script>
-    // ⚠️ Apne Apps Script Web App URL yahan paste karein
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwEzj2cWIdUO6ZLUjXFO7XO5Xu51KW4TZdDvyk3XCeuYAnak6ZuzU6rAspaDVnAimdFXg/exec';
+    // ⚠️ Apne Apps Script Web App URL yahan paste karein (same URL jo index.html me hai)
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyXL-schweSjIhgMb6Q3vDxx6vORo1RxFjA2lcVyFqc1IDqiSxt5xneA_rOWqs1moR_UA/exec';
     
-    let scData = {};
-    let allScNos = [];
-    let selectedScNo = null;
+    let mcData = {};
+    let allMcNos = [];
+    let selectedMcNo = null;
     let selectedItemName = null;
     let highlightedIndex = -1;
 
@@ -106,7 +106,8 @@
 
     async function loadDataFromBackend() {
       try {
-        const response = await fetch(APPS_SCRIPT_URL + '?action=getData');
+        // keyType=mc bhej rahe — backend MC NO column use karega
+        const response = await fetch(APPS_SCRIPT_URL + '?action=getData&keyType=mc');
         const result = await response.json();
         
         if (result.success) {
@@ -122,19 +123,19 @@
     }
 
     function loadData(data) {
-      scData = data;
-      allScNos = Object.keys(data).sort();
+      mcData = data;
+      allMcNos = Object.keys(data).sort();
       
-      const searchInput = document.getElementById('scSearch');
+      const searchInput = document.getElementById('mcSearch');
       
-      if (allScNos.length === 0) {
-        searchInput.placeholder = 'No SC Numbers found';
+      if (allMcNos.length === 0) {
+        searchInput.placeholder = 'No MC Numbers found';
         searchInput.disabled = true;
         return;
       }
       
-      searchInput.placeholder = `Type to search (${allScNos.length} SC NOs available)...`;
-      renderDropdown(allScNos);
+      searchInput.placeholder = `Type to search (${allMcNos.length} MC NOs available)...`;
+      renderDropdown(allMcNos);
     }
 
     function renderDropdown(list) {
@@ -144,37 +145,37 @@
       if (list.length === 0) {
         const div = document.createElement('div');
         div.className = 'dropdown-item no-match';
-        div.textContent = 'No matching SC NO found';
+        div.textContent = 'No matching MC NO found';
         dropdown.appendChild(div);
         return;
       }
       
-      list.forEach((sc, idx) => {
+      list.forEach((mc, idx) => {
         const div = document.createElement('div');
         div.className = 'dropdown-item';
-        div.textContent = sc;
-        div.onclick = () => selectScNo(sc);
+        div.textContent = mc;
+        div.onclick = () => selectMcNo(mc);
         div.dataset.index = idx;
         dropdown.appendChild(div);
       });
     }
 
     function filterDropdown() {
-      const query = document.getElementById('scSearch').value.trim().toLowerCase();
+      const query = document.getElementById('mcSearch').value.trim().toLowerCase();
       const clearBtn = document.getElementById('clearBtn');
       
       clearBtn.classList.toggle('visible', query.length > 0);
       
       if (!query) {
-        renderDropdown(allScNos);
+        renderDropdown(allMcNos);
       } else {
         const startsWith = [];
         const contains = [];
         
-        allScNos.forEach(sc => {
-          const lower = sc.toLowerCase();
-          if (lower.startsWith(query)) startsWith.push(sc);
-          else if (lower.includes(query)) contains.push(sc);
+        allMcNos.forEach(mc => {
+          const lower = mc.toLowerCase();
+          if (lower.startsWith(query)) startsWith.push(mc);
+          else if (lower.includes(query)) contains.push(mc);
         });
         
         renderDropdown([...startsWith, ...contains]);
@@ -183,8 +184,8 @@
       highlightedIndex = -1;
       showDropdown();
       
-      if (selectedScNo && document.getElementById('scSearch').value !== selectedScNo) {
-        selectedScNo = null;
+      if (selectedMcNo && document.getElementById('mcSearch').value !== selectedMcNo) {
+        selectedMcNo = null;
         document.getElementById('itemSection').style.display = 'none';
       }
     }
@@ -198,22 +199,22 @@
       highlightedIndex = -1;
     }
 
-    function selectScNo(sc) {
-      selectedScNo = sc;
-      document.getElementById('scSearch').value = sc;
+    function selectMcNo(mc) {
+      selectedMcNo = mc;
+      document.getElementById('mcSearch').value = mc;
       document.getElementById('clearBtn').classList.add('visible');
       hideDropdown();
       updateItemSection();
     }
 
     function clearSelection() {
-      selectedScNo = null;
+      selectedMcNo = null;
       selectedItemName = null;
-      document.getElementById('scSearch').value = '';
+      document.getElementById('mcSearch').value = '';
       document.getElementById('clearBtn').classList.remove('visible');
       document.getElementById('itemSection').style.display = 'none';
-      renderDropdown(allScNos);
-      document.getElementById('scSearch').focus();
+      renderDropdown(allMcNos);
+      document.getElementById('mcSearch').focus();
     }
 
     function handleKeyDown(e) {
@@ -233,9 +234,9 @@
       } else if (e.key === 'Enter') {
         e.preventDefault();
         if (highlightedIndex >= 0 && items[highlightedIndex]) {
-          selectScNo(items[highlightedIndex].textContent);
+          selectMcNo(items[highlightedIndex].textContent);
         } else if (items.length === 1) {
-          selectScNo(items[0].textContent);
+          selectMcNo(items[0].textContent);
         }
       } else if (e.key === 'Escape') {
         hideDropdown();
@@ -254,7 +255,7 @@
     });
 
     function updateItemSection() {
-      const scNo = selectedScNo;
+      const mcNo = selectedMcNo;
       const section = document.getElementById('itemSection');
       const dropdown = document.getElementById('itemName');
       const autoFill = document.getElementById('itemAutoFill');
@@ -266,12 +267,12 @@
       autoFill.style.display = 'none';
       dropdown.style.display = 'none';
       
-      if (!scNo || !scData[scNo]) {
+      if (!mcNo || !mcData[mcNo]) {
         section.style.display = 'none';
         return;
       }
       
-      const items = scData[scNo];
+      const items = mcData[mcNo];
       section.style.display = 'block';
       
       if (items.length === 1) {
@@ -298,22 +299,21 @@
 
     function onItemSelect() {
       const idx = document.getElementById('itemName').value;
-      if (idx === '' || !scData[selectedScNo]) {
+      if (idx === '' || !mcData[selectedMcNo]) {
         selectedItemName = null;
         return;
       }
-      selectedItemName = scData[selectedScNo][parseInt(idx)].itemName;
+      selectedItemName = mcData[selectedMcNo][parseInt(idx)].itemName;
     }
 
     async function submitForm() {
-      if (!selectedScNo) { showMessage('Please select an SC NO', 'error'); return; }
+      if (!selectedMcNo) { showMessage('Please select an MC NO', 'error'); return; }
       if (selectedItemName === null) { showMessage('Please select an Item Name', 'error'); return; }
       
       const expectedStart = document.getElementById('expectedStart').value;
       const targetClosure = document.getElementById('targetClosure').value;
       const challenges = document.getElementById('challenges').value;
       
-      // At least one field filled hona chahiye
       if (!expectedStart && !targetClosure && !challenges.trim()) {
         showMessage('Please fill at least one field (date or remarks)', 'error');
         return;
@@ -325,8 +325,8 @@
       showMessage('Submitting, please wait...', 'info');
       
       const formData = {
-        formType: 'hod',  // Backend ko bata raha hai konsa form hai
-        scNo: selectedScNo,
+        formType: 'hod',
+        mcNo: selectedMcNo,
         itemName: selectedItemName,
         expectedStart: expectedStart,
         targetClosure: targetClosure,
@@ -337,8 +337,6 @@
         const response = await fetch(APPS_SCRIPT_URL, {
           method: 'POST',
           body: JSON.stringify(formData)
-          // Note: Content-Type header intentionally NOT set
-          // Apps Script CORS ke saath text/plain assume karta hai
         });
         
         const result = await response.json();
